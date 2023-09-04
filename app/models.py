@@ -1,4 +1,5 @@
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, DateTime
+from sqlalchemy.orm import Relationship, relationship
 from sqlalchemy.sql.expression import text
 from sqlalchemy.sql.sqltypes import TIMESTAMP
 from .database import Base
@@ -14,6 +15,7 @@ class Post(Base):
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
     # created_at = Column(DateTime, server_default=text('now()'))
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user = Relationship("User")
 class User(Base):
     __tablename__ = "users"
 
