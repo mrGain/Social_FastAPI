@@ -1,6 +1,7 @@
 from fastapi import status, Response, HTTPException, Depends, APIRouter
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func, outerjoin
+from typing import List, Optional
 from ..database import get_db
 from .. import schemas, models, oauth2
 
@@ -10,10 +11,13 @@ router = APIRouter(
 )
 
 
-@router.get("/posts", response_model=List[schemas.Post])
-async def get_all_post(db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user)):
-    posts = db.query(models.Post).all()
-    return posts
+# @router.get("/posts", response_model=List[schemas.Post])
+@router.get("/posts", response_model=List[schemas.PostOut])
+async def get_all_post(db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user), limit: int = 10, skip: int = 0, search: Optional[str]=""):
+    posts = db.query(models.Post).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
+    #results = db.query(models.Post, func.count(models.Vote.post_id).label("votes")).join(models.Vote, models.Vote.post_id == models.Post.id, isouter=True).group_by(models.Post.id).all()
+    
+    # return posts
 
 
 # @router.get("/posts", response_model=List[schemas.Post])
@@ -21,6 +25,25 @@ async def get_all_post(db: Session = Depends(get_db), current_user: int = Depend
 #     posts = db.query(models.Post).filter(
 #         models.Post.user_id == current_user.id).all()
 #     return posts
+    try:
+        results = (
+            db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
+            .outerjoin(models.Vote, models.Vote.post_id == models.Post.id)
+            .group_by(models.Post.id)
+            .all()
+        )
+
+        # Check if results is empty
+        if not results:
+            return {"message": "No posts found."}
+
+        # Serialize the results to JSON
+        serialized_results = [{"post": post, "votes": votes} for post, votes in results]
+
+        return serialized_results
+    except Exception as e:
+        return {"error": str(e)}
+
 
 
 @router.post("/posts", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
