@@ -14,8 +14,8 @@ router = APIRouter(
 # @router.get("/posts", response_model=List[schemas.Post])
 @router.get("/posts", response_model=List[schemas.PostOut])
 async def get_all_post(db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user), limit: int = 10, skip: int = 0, search: Optional[str]=""):
-    # posts = db.query(models.Post).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
     try:
+        # posts = db.query(models.Post).filter(models.Post.title.contains(search)).limit(limit).offset(skip).all()
         posts = (
             db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
             .outerjoin(models.Vote, models.Vote.post_id == models.Post.id)
@@ -23,15 +23,15 @@ async def get_all_post(db: Session = Depends(get_db), current_user: int = Depend
             .filter(models.Post.title.contains(search)).limit(limit).offset(skip)
             .all()
         )
-
+        
         # Check if results is empty
         if not posts:
             return {"message": "No posts found."}
 
         # Serialize the results to JSON
-        serialized_results = [{"post": post, "votes": votes} for post, votes in posts]
+        serialized_posts = [{"post": post, "votes": votes} for post, votes in posts]
 
-        return serialized_results
+        return serialized_posts
     except Exception as e:
         return {"error": str(e)}
 
@@ -55,16 +55,23 @@ async def create_post(post: schemas.PostCreate, db: Session = Depends(get_db), c
     return new_post
 
 
-@router.get("/posts/{id}", response_model=schemas.Post)
+@router.get("/posts/{id}", response_model=schemas.PostOut)
 async def get_post(id: int, db: Session = Depends(get_db), current_user: int = Depends(oauth2.get_current_user)):
-    post = db.query(models.Post).filter(models.Post.id == id).first()
+    # post = db.query(models.Post).filter(models.Post.id == id).first()
+    post = (
+        db.query(models.Post, func.count(models.Vote.post_id).label("votes"))
+        .outerjoin(models.Vote, models.Vote.post_id == models.Post.id)
+        .group_by(models.Post.id)
+        .filter(models.Post.id == id)
+        .first()
+    )
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Post not found"
         )
-    return post
-
+    post, votes = post
+    return {"post":post, "votes": votes}
 
 @router.put("/posts/{id}", response_model=schemas.Post)
 async def update_post(id: int, updated_post: schemas.PostCreate, db: Session = Depends(get_db), current_user=Depends(oauth2.get_current_user)):
